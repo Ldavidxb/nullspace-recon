@@ -1,112 +1,158 @@
+import { useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import { Badge, NavButton, PageFooter, ShieldIcon } from '../components/ui';
+
 interface Props {
   manifestJson: string;
   onBack: () => void;
 }
 
 export function ManifestViewer({ manifestJson, onBack }: Props) {
-  let parsed: Record<string, unknown> = {};
-  try {
-    parsed = JSON.parse(manifestJson);
-  } catch {
-    parsed = { raw: manifestJson };
-  }
-  const formatted = JSON.stringify(parsed, null, 2);
+  const [copied, setCopied] = useState(false);
+
+  const { parsed, formatted } = useMemo(() => {
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(manifestJson);
+    } catch {
+      parsed = { raw: manifestJson };
+    }
+    return { parsed, formatted: JSON.stringify(parsed, null, 2) };
+  }, [manifestJson]);
+  const lines = formatted.split('\n');
 
   const download = () => {
-    const blob = new Blob([formatted], { type: 'application/json' });
+    const blob = new Blob([formatted + '\n'], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = 'verification-manifest.json';
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
-  const copy = () => {
-    navigator.clipboard.writeText(formatted);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(formatted);
+    } catch {
+      // Clipboard API is unavailable outside secure contexts; fall back to a hidden textarea.
+      const ta = document.createElement('textarea');
+      ta.value = formatted;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
   };
+
+  const signature = parsed.signature as { algorithm?: string } | undefined;
+  const digest = parsed.manifest_sha256 as string | undefined;
 
   return (
     <div className="mesh-grid min-h-screen">
-      <div className="max-w-5xl mx-auto px-6 py-6">
-
-        <nav className="flex items-center justify-between mb-8 animate-fade-in">
-          <button onClick={onBack} className="text-slate-500 hover:text-white transition-colors flex items-center gap-2 text-sm group">
-            <span className="text-lg group-hover:-translate-x-0.5 transition-transform">&#8592;</span>
-            Back to dashboard
-          </button>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
+        <nav className="flex items-center justify-between gap-3 animate-fade-in">
+          <NavButton onClick={onBack}>
+            <span className="transition-transform group-hover:-translate-x-0.5">←</span>
+            <span className="hidden sm:inline">Back to dashboard</span>
+            <span className="sm:hidden">Back</span>
+          </NavButton>
           <div className="flex items-center gap-2">
-            <button onClick={copy}
-              className="text-slate-400 hover:text-white transition-all text-sm border border-slate-700/50 bg-slate-900/50 rounded-lg px-4 py-2 hover:bg-slate-800/60 hover:border-slate-600/50">
-              Copy
-            </button>
-            <button onClick={download}
-              className="text-cyan-400 hover:text-cyan-300 transition-all text-sm border border-cyan-500/20 bg-cyan-500/5 rounded-lg px-4 py-2 hover:bg-cyan-500/10 hover:border-cyan-500/40 hover:shadow-lg hover:shadow-cyan-500/5">
-              Download JSON &#8595;
-            </button>
+            <NavButton onClick={copy} variant="outline" ariaLabel="Copy manifest JSON">
+              {copied ? <span className="text-emerald-300">Copied ✓</span> : 'Copy'}
+            </NavButton>
+            <NavButton onClick={download} variant="accent">
+              Download JSON <span aria-hidden>↓</span>
+            </NavButton>
           </div>
         </nav>
 
-        <div className="mb-8 animate-fade-in">
-          <div className="flex items-center gap-3 mb-3">
-            <h1 className="text-3xl font-bold text-white tracking-tight">Verification Manifest</h1>
-            <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-              SHA-256
-            </span>
+        <header className="mt-8 mb-6 animate-fade-in-d1">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl sm:text-3xl font-semibold text-white tracking-[-0.025em]">Verification Manifest</h1>
+            <Badge>SHA-256</Badge>
           </div>
-          <p className="text-sm text-slate-500 max-w-2xl leading-relaxed">
+          <p className="mt-3 text-sm text-slate-400 max-w-2xl leading-relaxed">
             Cryptographic binding of measurements, operator, reconstruction, and verification results.
             Ready for ML-DSA-65 post-quantum signing.
           </p>
-        </div>
+        </header>
 
-        <div className="grid grid-cols-3 gap-3 mb-6 animate-fade-in-d1">
-          <ManifestField label="Version" value={parsed.version as string} />
-          <ManifestField label="Operator" value={(parsed.operator as string)?.slice(0, 50)} />
-          <ManifestField label="Noise Model" value={parsed.noise_model as string} />
-        </div>
+        <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 animate-fade-in-d2">
+          <Field label="Version" value={parsed.version as string} />
+          <Field label="Operator" value={parsed.operator as string} />
+          <Field label="Noise Model" value={parsed.noise_model as string} />
+        </section>
 
-        <div className="bg-slate-900/40 backdrop-blur-sm border border-slate-800/60 rounded-xl overflow-hidden animate-fade-in-d2">
-          <div className="px-5 py-3 border-b border-slate-800/60 flex items-center gap-3">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span className="text-xs text-slate-400 font-mono tracking-wide">verification-manifest.json</span>
-            <span className="text-xs text-slate-600 ml-auto font-mono">{formatted.split('\n').length} lines</span>
+        {digest && (
+          <section className="mt-3 glass rounded-2xl px-4 sm:px-5 py-3.5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 animate-fade-in-d2">
+            <div className="flex items-center gap-2 text-emerald-300 text-xs font-semibold uppercase tracking-[0.14em] shrink-0">
+              <ShieldIcon className="w-4 h-4" /> Manifest digest
+            </div>
+            <code className="text-[12px] font-mono text-slate-200 break-all">{digest}</code>
+            <span className="sm:ml-auto shrink-0 text-[11px] font-mono text-slate-400 border border-slate-700/50 rounded-md px-2 py-0.5">
+              {signature?.algorithm ?? 'ML-DSA-65'} · awaiting key
+            </span>
+          </section>
+        )}
+
+        <section className="mt-4 glass rounded-2xl overflow-hidden animate-fade-in-d3">
+          <div className="px-4 sm:px-5 py-3 border-b border-slate-700/40 flex items-center gap-3 bg-slate-950/30">
+            <span className="flex gap-1.5" aria-hidden>
+              <span className="w-2.5 h-2.5 rounded-full bg-slate-700" />
+              <span className="w-2.5 h-2.5 rounded-full bg-slate-700" />
+              <span className="w-2.5 h-2.5 rounded-full bg-slate-700" />
+            </span>
+            <span className="text-xs text-slate-300 font-mono">verification-manifest.json</span>
+            <span className="text-xs text-slate-500 ml-auto font-mono">{lines.length} lines · {new Blob([formatted]).size} B</span>
           </div>
-          <pre className="p-5 text-sm text-slate-300 font-mono overflow-x-auto leading-relaxed max-h-[65vh] overflow-y-auto">
-            {formatted.split('\n').map((line, i) => (
-              <div key={i} className="flex hover:bg-slate-800/30 -mx-5 px-5 rounded">
-                <span className="w-10 text-right text-slate-700 select-none mr-5 shrink-0 tabular-nums">{i + 1}</span>
-                <span>{highlightJson(line)}</span>
+          <pre className="code-scroll py-4 text-[12.5px] sm:text-[13px] font-mono overflow-auto leading-[1.7] max-h-[62vh] text-slate-300">
+            {lines.map((line, i) => (
+              <div key={i} className="flex hover:bg-slate-800/30 pr-5">
+                <span className="w-12 shrink-0 text-right pr-4 text-slate-600 select-none tabular-nums">{i + 1}</span>
+                <span className="whitespace-pre">{highlightJson(line)}</span>
               </div>
             ))}
           </pre>
-        </div>
+        </section>
 
-        <footer className="mt-10 pt-6 border-t border-slate-800/40 animate-fade-in-d3">
-          <p className="text-xs text-slate-600">
-            nullspace-recon v0.2.0 &middot; Rust + WebAssembly &middot; Client-side only
-          </p>
-        </footer>
+        <PageFooter left="nullspace-recon v0.2.0 · Rust + WebAssembly · Client-side only" right="Your data never leaves this machine" />
       </div>
     </div>
   );
 }
 
-function ManifestField({ label, value }: { label: string; value?: string }) {
+function Field({ label, value }: { label: string; value?: string }) {
   return (
-    <div className="bg-slate-900/40 backdrop-blur-sm border border-slate-800/60 rounded-xl px-4 py-3.5">
-      <div className="text-xs text-slate-500 mb-1.5 uppercase tracking-wider font-medium">{label}</div>
-      <div className="text-sm text-cyan-400 font-mono truncate">{value ?? 'N/A'}</div>
+    <div className="glass rounded-2xl px-4 py-3.5 min-w-0">
+      <div className="text-[11px] text-slate-400 uppercase tracking-[0.14em] font-medium">{label}</div>
+      <div className="mt-1.5 text-sm text-cyan-300 font-mono truncate" title={value}>{value ?? 'N/A'}</div>
     </div>
   );
 }
 
-function highlightJson(line: string): React.ReactNode {
-  return line.replace(/"([^"]+)":/g, '<KEY>$1</KEY>:').split(/(<KEY>.*?<\/KEY>)/).map((part, i) => {
-    const match = part.match(/<KEY>(.*?)<\/KEY>/);
-    if (match) return <span key={i} className="text-cyan-400">&quot;{match[1]}&quot;</span>;
-    if (part.match(/"[^"]*"/)) return <span key={i} className="text-emerald-400">{part}</span>;
-    if (part.match(/\b\d+\.?\d*\b/)) return <span key={i} className="text-amber-300">{part}</span>;
-    return <span key={i}>{part}</span>;
-  });
+// Tokenises one line of pretty-printed JSON: keys cyan, strings green, numbers amber, literals violet.
+const TOKEN = /("(?:[^"\\]|\\.)*")(\s*:)?|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|\b(true|false|null)\b/g;
+
+function highlightJson(line: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  let last = 0;
+  for (const m of line.matchAll(TOKEN)) {
+    const idx = m.index ?? 0;
+    if (idx > last) out.push(<span key={last} className="text-slate-500">{line.slice(last, idx)}</span>);
+    if (m[1] && m[2]) {
+      out.push(<span key={idx} className="text-cyan-300">{m[1]}</span>, <span key={idx + 'c'} className="text-slate-500">{m[2]}</span>);
+    } else if (m[1]) {
+      out.push(<span key={idx} className="text-emerald-300">{m[1]}</span>);
+    } else if (m[3]) {
+      out.push(<span key={idx} className="text-amber-300">{m[3]}</span>);
+    } else {
+      out.push(<span key={idx} className="text-violet-300">{m[4]}</span>);
+    }
+    last = idx + m[0].length;
+  }
+  if (last < line.length) out.push(<span key={last} className="text-slate-500">{line.slice(last)}</span>);
+  return out;
 }

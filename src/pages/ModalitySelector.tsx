@@ -1,103 +1,69 @@
 import { useState } from 'react';
-import { verify_parallel_beam, verify_fan_beam, verify_mri } from '../wasm';
-import type { VerificationResult } from '../wasm';
+import type { CSSProperties } from 'react';
+import { MODALITIES, verify } from '../lib/engine';
+import type { EngineInfo, ModalityId, PriorType, VerificationResult } from '../lib/engine';
+import { Badge, LockIcon, LogoMark, NavButton, PageFooter, Wordmark } from '../components/ui';
 
 interface Props {
-  onSelect: (modality: string, result: VerificationResult) => void;
+  engine: EngineInfo;
+  onBack: () => void;
+  onComplete: (modality: ModalityId, result: VerificationResult) => void;
 }
 
-const modalities = [
-  {
-    id: 'parallel-beam',
-    name: 'Parallel-Beam CT',
-    desc: 'Standard diagnostic CT geometry. Equispaced projection angles with linear detector interpolation.',
-    params: { n: 32, angles: 45, sigma: 0.02 },
-    specs: ['32 x 32 grid', '45 angles', 'σ = 0.02'],
-    gradient: 'from-cyan-500/20 to-blue-500/20',
-    iconColor: 'text-cyan-400',
-    borderHover: 'hover:border-cyan-500/40',
+const accents: Record<ModalityId, { tile: string; icon: string; glowA: string; glowB: string; chip: string }> = {
+  'parallel-beam': {
+    tile: 'from-cyan-500/25 to-blue-500/25',
+    icon: 'text-cyan-300',
+    glowA: 'rgba(6,182,212,0.6)',
+    glowB: 'rgba(59,130,246,0.45)',
+    chip: 'text-cyan-300',
   },
-  {
-    id: 'fan-beam',
-    name: 'Fan-Beam CT',
-    desc: 'Clinical cone-beam geometry with point source and flat-panel detector array.',
-    params: { n: 32, angles: 60, n_det: 48, source: 5.0, det: 5.0, sigma: 0.02 },
-    specs: ['32 x 32 grid', '60 angles', '48 detectors'],
-    gradient: 'from-violet-500/20 to-indigo-500/20',
-    iconColor: 'text-violet-400',
-    borderHover: 'hover:border-violet-500/40',
+  'fan-beam': {
+    tile: 'from-violet-500/25 to-indigo-500/25',
+    icon: 'text-violet-300',
+    glowA: 'rgba(139,92,246,0.6)',
+    glowB: 'rgba(99,102,241,0.45)',
+    chip: 'text-violet-300',
   },
-  {
-    id: 'mri',
-    name: 'MRI (Cartesian)',
-    desc: 'Multi-coil accelerated MRI with k-space undersampling and auto-calibration signal.',
-    params: { n: 32, coils: 4, accel: 4, sigma: 0.05 },
-    specs: ['32 x 32 grid', '4 coils', '4x acceleration'],
-    gradient: 'from-emerald-500/20 to-teal-500/20',
-    iconColor: 'text-emerald-400',
-    borderHover: 'hover:border-emerald-500/40',
+  'mri': {
+    tile: 'from-emerald-500/25 to-teal-500/25',
+    icon: 'text-emerald-300',
+    glowA: 'rgba(16,185,129,0.6)',
+    glowB: 'rgba(20,184,166,0.45)',
+    chip: 'text-emerald-300',
   },
-];
-
-const CTIcon = ({ className }: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className}>
-    <circle cx="12" cy="12" r="9" />
-    <line x1="12" y1="3" x2="12" y2="7" />
-    <line x1="12" y1="17" x2="12" y2="21" />
-    <line x1="3" y1="12" x2="7" y2="12" />
-    <line x1="17" y1="12" x2="21" y2="12" />
-    <circle cx="12" cy="12" r="3" strokeDasharray="2 2" />
-  </svg>
-);
-
-const FanIcon = ({ className }: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className}>
-    <circle cx="12" cy="3" r="1.5" fill="currentColor" />
-    <line x1="12" y1="4.5" x2="4" y2="20" />
-    <line x1="12" y1="4.5" x2="20" y2="20" />
-    <line x1="12" y1="4.5" x2="12" y2="20" />
-    <path d="M4 20 L20 20" strokeLinecap="round" />
-  </svg>
-);
-
-const MRIIcon = ({ className }: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className}>
-    <path d="M3 12 Q6 4 12 4 Q18 4 21 12 Q18 20 12 20 Q6 20 3 12Z" />
-    <path d="M8 12 Q9 8 12 8 Q15 8 16 12 Q15 16 12 16 Q9 16 8 12Z" />
-    <line x1="1" y1="12" x2="23" y2="12" strokeDasharray="1 2" opacity="0.4" />
-  </svg>
-);
-
-const icons: Record<string, typeof CTIcon> = {
-  'parallel-beam': CTIcon,
-  'fan-beam': FanIcon,
-  'mri': MRIIcon,
 };
 
-export function ModalitySelector({ onSelect }: Props) {
-  const [running, setRunning] = useState<string | null>(null);
-  const [prior, setPrior] = useState('tv');
-  const [lambda, setLambda] = useState(0.1);
+const steps = ['Forward operator', 'Tikhonov spectrum', 'Band projection', 'χ² residual test', 'Manifest hash'];
 
+export function ModalitySelector({ engine, onBack, onComplete }: Props) {
+  const [running, setRunning] = useState<ModalityId | null>(null);
+  const [step, setStep] = useState(0);
+  const [prior, setPrior] = useState<PriorType>('tv');
+  const [lambdaText, setLambdaText] = useState('0.1');
   const [error, setError] = useState<string | null>(null);
 
-  const run = async (mod: typeof modalities[number]) => {
-    setRunning(mod.id);
-    setError(null);
-    await new Promise(r => setTimeout(r, 50));
+  const lambda = Number(lambdaText);
+  const lambdaValid = Number.isFinite(lambda) && lambda > 0 && lambda <= 10;
 
+  const run = async (id: ModalityId) => {
+    if (!lambdaValid) return;
+    setRunning(id);
+    setError(null);
+    setStep(0);
     try {
-      let result: VerificationResult;
-      if (mod.id === 'parallel-beam') {
-        result = verify_parallel_beam(mod.params.n, mod.params.angles, mod.params.sigma, prior, lambda) as VerificationResult;
-      } else if (mod.id === 'fan-beam') {
-        const p = mod.params as typeof modalities[1]['params'];
-        result = verify_fan_beam(p.n, p.angles, p.n_det!, p.source!, p.det!, p.sigma, prior, lambda) as VerificationResult;
-      } else {
-        const p = mod.params as typeof modalities[2]['params'];
-        result = verify_mri(p.n, p.coils!, p.accel!, p.sigma, prior, lambda) as VerificationResult;
+      // Let the overlay paint, then walk the pipeline stages so the audience sees what is being computed.
+      const started = performance.now();
+      const pending = new Promise<VerificationResult>((resolve, reject) =>
+        setTimeout(() => verify(id, prior, lambda).then(resolve, reject), 30));
+      for (let i = 1; i < steps.length; i++) {
+        await new Promise(r => setTimeout(r, 260));
+        setStep(i);
       }
-      onSelect(mod.name, result);
+      const result = await pending;
+      const elapsed = performance.now() - started;
+      if (elapsed < 1500) await new Promise(r => setTimeout(r, 1500 - elapsed));
+      onComplete(id, result);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Verification failed');
       setRunning(null);
@@ -105,106 +71,197 @@ export function ModalitySelector({ onSelect }: Props) {
   };
 
   return (
-    <div className="mesh-grid min-h-screen flex flex-col">
-      <div className="max-w-5xl mx-auto px-6 pt-16 pb-12 flex-1">
-        <header className="mb-16 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-cyan-500/20 bg-cyan-500/5 mb-6">
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 pulse-ring" />
-            <span className="text-cyan-400 text-xs font-medium tracking-widest uppercase">Physics-Bounded Verification</span>
+    <div className="mesh-grid min-h-screen">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+        <nav className="flex items-center justify-between gap-4 animate-fade-in">
+          <NavButton onClick={onBack}>
+            <span className="transition-transform group-hover:-translate-x-0.5">←</span> Back
+          </NavButton>
+          <div className="flex items-center gap-2.5">
+            <LogoMark className="w-6 h-6" />
+            <Wordmark className="text-sm" />
           </div>
+          <span className="hidden sm:inline text-xs font-mono text-slate-500">
+            engine: <span className={engine.kind === 'wasm' ? 'text-emerald-300' : 'text-slate-300'}>{engine.label}</span>
+          </span>
+        </nav>
 
-          <h1 className="text-5xl font-bold text-white tracking-tight mb-4">
-            nullspace
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">-recon</span>
+        <header className="text-center mt-12 sm:mt-16 mb-10 sm:mb-12 animate-fade-in-d1">
+          <Badge>Step 1 of 3 · Choose modality</Badge>
+          <h1 className="mt-5 text-3xl sm:text-4xl font-semibold text-white tracking-[-0.03em]">
+            Which acquisition should we verify?
           </h1>
-
-          <p className="text-slate-400 text-lg max-w-xl mx-auto leading-relaxed mb-2">
-            How much of a medical image is measurement-proven
-            <br />vs. AI-supplied?
-          </p>
-
-          <p className="text-slate-600 text-sm">
-            All computation runs in your browser. Your data never leaves this machine.
+          <p className="mt-3 text-slate-400 max-w-xl mx-auto text-sm sm:text-base leading-relaxed">
+            Each modality has its own forward operator. We compute its spectrum and bound exactly which
+            image content the measurements can — and cannot — see.
           </p>
         </header>
 
-        <div className="flex items-center justify-center gap-8 mb-12">
-          <label className="flex items-center gap-3 text-sm">
-            <span className="text-slate-500 font-medium">Prior</span>
-            <select
-              value={prior}
-              onChange={e => setPrior(e.target.value)}
-              className="bg-slate-900/80 border border-slate-700/50 rounded-lg px-3 py-1.5 text-slate-200 text-sm focus:border-cyan-500/50 focus:outline-none transition"
-            >
-              <option value="tv">Total Variation</option>
-              <option value="gaussian">Gaussian Smooth</option>
-            </select>
-          </label>
-          <label className="flex items-center gap-3 text-sm">
-            <span className="text-slate-500 font-medium">Lambda</span>
-            <input
-              type="number"
-              step="0.01"
-              min="0.01"
-              max="2"
-              value={lambda}
-              onChange={e => setLambda(parseFloat(e.target.value) || 0.1)}
-              className="bg-slate-900/80 border border-slate-700/50 rounded-lg px-3 py-1.5 text-slate-200 text-sm w-20 font-mono focus:border-cyan-500/50 focus:outline-none transition"
-            />
-          </label>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {modalities.map(mod => {
-            const Icon = icons[mod.id];
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 animate-fade-in-d2">
+          {MODALITIES.map(mod => {
+            const a = accents[mod.id];
+            const isRunning = running === mod.id;
             return (
               <button
                 key={mod.id}
-                onClick={() => run(mod)}
-                disabled={running !== null}
-                className={`card-glow group relative bg-slate-900/60 backdrop-blur-sm border border-slate-800/80 rounded-2xl p-7 text-left
-                           ${mod.borderHover} transition-all duration-300 ease-out
-                           hover:bg-slate-900/80 hover:-translate-y-1 hover:shadow-2xl hover:shadow-cyan-500/5
-                           disabled:opacity-50 disabled:cursor-wait disabled:hover:translate-y-0`}
+                onClick={() => run(mod.id)}
+                disabled={running !== null || !lambdaValid}
+                style={{ '--glow-a': a.glowA, '--glow-b': a.glowB } as CSSProperties}
+                className="card-glow glass group relative rounded-2xl p-6 sm:p-7 text-left transition-all duration-300 ease-out
+                           hover:-translate-y-1 hover:shadow-2xl hover:shadow-black/40
+                           focus-visible:outline-2 focus-visible:outline-cyan-400 focus-visible:outline-offset-2
+                           disabled:cursor-not-allowed disabled:hover:translate-y-0"
               >
-                {running === mod.id && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-slate-950/90 rounded-2xl z-10 backdrop-blur-sm">
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="w-10 h-10 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-                      <span className="text-xs text-cyan-400 tracking-wide">Computing...</span>
-                    </div>
-                  </div>
-                )}
+                {isRunning && <ComputingOverlay step={step} />}
+                {running !== null && !isRunning && <div className="absolute inset-0 rounded-2xl bg-slate-950/50 z-10" />}
 
-                <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${mod.gradient} border border-white/5 flex items-center justify-center mb-5`}>
-                  <Icon className={`w-7 h-7 ${mod.iconColor}`} />
+                <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${a.tile} border border-white/10 flex items-center justify-center`}>
+                  <ModalityIcon id={mod.id} className={`w-8 h-8 ${a.icon}`} />
                 </div>
 
-                <h3 className="text-white font-semibold text-lg mb-2 tracking-tight">{mod.name}</h3>
-                <p className="text-slate-400 text-sm leading-relaxed mb-5">{mod.desc}</p>
+                <h3 className="mt-5 text-white font-semibold text-lg tracking-tight">{mod.name}</h3>
+                <p className="mt-2 text-slate-400 text-sm leading-relaxed min-h-[3.75rem]">{mod.desc}</p>
 
-                <div className="flex flex-wrap gap-2">
-                  {mod.specs.map(spec => (
-                    <span key={spec} className="text-xs font-mono text-slate-500 bg-slate-800/50 px-2 py-0.5 rounded">
+                <div className="mt-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-slate-400">
+                  {mod.specs.map((spec, i) => (
+                    <span key={spec} className="flex items-center gap-2">
+                      {i > 0 && <span className="text-slate-600">·</span>}
                       {spec}
                     </span>
                   ))}
                 </div>
 
-                <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <span className="text-xs text-cyan-400/60">Run verification &#8594;</span>
+                <div className="mt-6 pt-4 border-t border-slate-700/40 flex items-center justify-between">
+                  <span className={`text-xs font-medium ${a.chip}`}>Run verification</span>
+                  <span className={`${a.chip} transition-transform group-hover:translate-x-1`}>→</span>
                 </div>
               </button>
             );
           })}
         </div>
-      </div>
 
-      <footer className="text-center py-6 border-t border-slate-800/50">
-        <p className="text-xs text-slate-600 tracking-wide">
-          Rust + WebAssembly &middot; Zero-server architecture &middot; Client-side computation only
-        </p>
-      </footer>
+        <section className="mt-6 glass rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center gap-4 md:gap-8 animate-fade-in-d3">
+          <div className="md:w-56 shrink-0">
+            <div className="text-sm font-semibold text-white">Reconstruction prior</div>
+            <div className="text-xs text-slate-500 mt-0.5">Regulariser the AI reconstruction used</div>
+          </div>
+
+          <div role="radiogroup" aria-label="Prior" className="inline-flex rounded-xl bg-slate-950/60 border border-slate-700/50 p-1 self-start md:self-auto">
+            {([['tv', 'Total Variation'], ['gaussian', 'Gaussian Smooth']] as const).map(([value, label]) => (
+              <button
+                key={value}
+                role="radio"
+                aria-checked={prior === value}
+                onClick={() => setPrior(value)}
+                disabled={running !== null}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  prior === value
+                    ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-white border border-cyan-500/30 shadow-inner'
+                    : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <label className="flex items-center gap-3 text-sm">
+            <span className="text-slate-300 font-medium font-mono">λ</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0.001"
+              max="10"
+              value={lambdaText}
+              onChange={e => setLambdaText(e.target.value)}
+              disabled={running !== null}
+              aria-invalid={!lambdaValid}
+              className={`w-28 bg-slate-950/60 border rounded-lg px-3 py-2 text-slate-100 text-sm font-mono focus:outline-none transition ${
+                lambdaValid ? 'border-slate-700/50 focus:border-cyan-500/60' : 'border-red-500/60'
+              }`}
+            />
+            <span className="text-xs text-slate-500">{lambdaValid ? 'regularisation weight' : 'enter 0 < λ ≤ 10'}</span>
+          </label>
+
+          <div className="md:ml-auto text-xs text-slate-400 flex items-center gap-2">
+            <LockIcon className="w-3.5 h-3.5 text-emerald-400" />
+            Runs locally
+          </div>
+        </section>
+
+        {error && (
+          <div role="alert" className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
+        <PageFooter left="Rust + WebAssembly · Zero-server architecture · Client-side only" right="Your data never leaves this machine" />
+      </div>
     </div>
+  );
+}
+
+function ComputingOverlay({ step }: { step: number }) {
+  return (
+    <div className="absolute inset-0 z-20 rounded-2xl bg-[#070b15]/[0.97] flex items-center justify-center p-6" aria-live="polite">
+      <div className="w-full max-w-[220px]">
+        <div className="flex items-center gap-3">
+          <div className="relative w-9 h-9">
+            <div className="absolute inset-0 rounded-full border-2 border-cyan-500/20" />
+            <div className="absolute inset-0 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin" />
+          </div>
+          <div>
+            <div className="text-sm font-semibold text-white">Computing…</div>
+            <div className="text-[11px] text-slate-400 font-mono">on-device</div>
+          </div>
+        </div>
+        <ol className="mt-5 space-y-1.5">
+          {steps.map((s, i) => (
+            <li key={s} className={`flex items-center gap-2 text-xs font-mono transition-colors ${
+              i < step ? 'text-emerald-300' : i === step ? 'text-cyan-200' : 'text-slate-600'
+            }`}>
+              <span className="w-3 text-center">{i < step ? '✓' : i === step ? '›' : '·'}</span>
+              {s}
+            </li>
+          ))}
+        </ol>
+      </div>
+    </div>
+  );
+}
+
+export function ModalityIcon({ id, className }: { id: ModalityId; className?: string }) {
+  if (id === 'parallel-beam') {
+    return (
+      <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.4" className={className} aria-hidden>
+        <circle cx="16" cy="16" r="11" />
+        <circle cx="16" cy="16" r="4.5" strokeDasharray="2 2" />
+        <line x1="16" y1="2" x2="16" y2="9" strokeLinecap="round" />
+        <line x1="16" y1="23" x2="16" y2="30" strokeLinecap="round" />
+        <line x1="2" y1="16" x2="9" y2="16" strokeLinecap="round" />
+        <line x1="23" y1="16" x2="30" y2="16" strokeLinecap="round" />
+        <circle cx="16" cy="16" r="1.2" fill="currentColor" stroke="none" />
+      </svg>
+    );
+  }
+  if (id === 'fan-beam') {
+    return (
+      <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.4" className={className} aria-hidden>
+        <circle cx="16" cy="5" r="2" fill="currentColor" />
+        {[-10, -5, 0, 5, 10].map(dx => (
+          <line key={dx} x1="16" y1="7" x2={16 + dx} y2="25" opacity={dx === 0 ? 1 : 0.7} />
+        ))}
+        <rect x="4" y="25" width="24" height="3" rx="1" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.4" className={className} aria-hidden>
+      <ellipse cx="16" cy="16" rx="13" ry="8" />
+      <ellipse cx="16" cy="16" rx="7.5" ry="4.5" />
+      <path d="M3 16h26" strokeDasharray="1.5 2" opacity="0.5" />
+      <path d="M16 5v3M16 24v3" strokeLinecap="round" />
+    </svg>
   );
 }

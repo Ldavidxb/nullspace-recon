@@ -1,32 +1,42 @@
-# React + TypeScript + Vite
+# nullspace-recon — Medical Image Verification Demo
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Sales demo frontend for **nullspace-recon**, a physics-based verification engine for
+AI-reconstructed medical images. It decomposes every pixel of a reconstruction into
+three provenance bands — **measured**, **ill-conditioned** and **null-space (AI-supplied)** —
+runs a χ² residual test, and produces a SHA-256 manifest ready for ML-DSA-65 signing.
 
-Currently, two official plugins are available:
+## Screens
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| Route | Screen |
+|---|---|
+| `#/` | Landing / hero |
+| `#/verify` | Modality selection (Parallel-beam CT, Fan-beam CT, MRI) + prior / λ |
+| `#/dashboard` | Verification dashboard: stats, ground truth / reconstruction / provenance heatmap, χ² gauge, spectral radar |
+| `#/manifest` | Verification manifest (syntax-highlighted JSON, copy, download) |
 
-## React Compiler
+`#autorun` jumps straight to the parallel-beam dashboard.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Run
 
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev      # http://localhost:3100
+npm run build    # static bundle in dist/ — serve from any static host, no backend
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Engine
+
+`src/lib/engine.ts` looks for the compiled Rust→WASM package at build time:
+
+- `../wasm/pkg/nullspace_recon_wasm.js` (the `demo/wasm/pkg` layout of the main repo), or
+- `./wasm-pkg/nullspace_recon_wasm.js` (copy the `pkg/` output here).
+
+If found, `verify_parallel_beam`, `verify_fan_beam` and `verify_mri` run live in the
+browser. If not, a deterministic **reference dataset** is used: a Shepp-Logan phantom,
+a degraded reconstruction, a spectral band split, and the published verification
+statistics (parallel-beam at TV λ=0.1 reproduces the reference values exactly:
+rel. error 431.5 %, rank 869, p = 0.5113, χ²ᵣ = 0.997). Manifest hashes are real SHA-256
+digests of the arrays shown. The engine in use is shown on the modality screen and
+recorded in the manifest's `engine` field.
+
+Everything runs client-side; the only network request is for Google Fonts.
