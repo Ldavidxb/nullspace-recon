@@ -1,14 +1,19 @@
-import { useState } from 'react';
-import type { CSSProperties } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties, DragEvent } from 'react';
 import { MODALITIES, setLiveEngine, verify } from '../lib/engine';
 import type { EngineInfo, ModalityId, PriorType, VerificationResult } from '../lib/engine';
+import { referenceRun } from '../lib/run';
+import type { Run } from '../lib/run';
+import { runMriAnalysis } from '../lib/mri/client.ts';
+import type { MriAnalysis } from '../lib/mri/sense.ts';
 import { Badge, LockIcon, LogoMark, NavButton, PageFooter, Wordmark } from '../components/ui';
 
 interface Props {
   engine: EngineInfo;
+  autoStart?: boolean;
   onEngineChange: (engine: EngineInfo) => void;
   onBack: () => void;
-  onComplete: (modality: ModalityId, result: VerificationResult) => void;
+  onComplete: (run: Run) => void;
 }
 
 const accents: Record<ModalityId, { tile: string; icon: string; glowA: string; glowB: string; chip: string }> = {
@@ -37,7 +42,7 @@ const accents: Record<ModalityId, { tile: string; icon: string; glowA: string; g
 
 const steps = ['Forward operator', 'Tikhonov spectrum', 'Band projection', 'χ² residual test', 'Manifest hash'];
 
-export function ModalitySelector({ engine, onEngineChange, onBack, onComplete }: Props) {
+export function ModalitySelector({ engine, autoStart = false, onEngineChange, onBack, onComplete }: Props) {
   const [running, setRunning] = useState<ModalityId | null>(null);
   const [step, setStep] = useState(0);
   const [prior, setPrior] = useState<PriorType>('tv');
@@ -64,7 +69,7 @@ export function ModalitySelector({ engine, onEngineChange, onBack, onComplete }:
       const result = await pending;
       const elapsed = performance.now() - started;
       if (elapsed < 1500) await new Promise(r => setTimeout(r, 1500 - elapsed));
-      onComplete(id, result);
+      onComplete(referenceRun(id, result));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Verification failed');
       setRunning(null);
@@ -106,7 +111,7 @@ export function ModalitySelector({ engine, onEngineChange, onBack, onComplete }:
           )}
         </nav>
 
-        <header className="text-center mt-12 sm:mt-16 mb-10 sm:mb-12 animate-fade-in-d1">
+        <header className="text-center mt-12 sm:mt-14 mb-8 sm:mb-10 animate-fade-in-d1">
           <Badge>Step 1 of 3 · Choose modality</Badge>
           <h1 className="mt-5 text-3xl sm:text-4xl font-semibold text-white tracking-[-0.03em]">
             Which acquisition should we verify?
@@ -117,7 +122,16 @@ export function ModalitySelector({ engine, onEngineChange, onBack, onComplete }:
           </p>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 animate-fade-in-d2">
+        <FullResolutionMri autoStart={autoStart} disabled={running !== null} onComplete={onComplete} />
+
+        <div className="mt-12 mb-4 flex flex-wrap items-end justify-between gap-2 animate-fade-in-d3">
+          <div>
+            <h2 className="text-sm font-semibold text-white">Reference demonstrators</h2>
+            <p className="text-xs text-slate-500 mt-0.5">32×32 operators across modalities · reference dataset</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 animate-fade-in-d3">
           {MODALITIES.map(mod => {
             const a = accents[mod.id];
             const isRunning = running === mod.id;
@@ -219,6 +233,163 @@ export function ModalitySelector({ engine, onEngineChange, onBack, onComplete }:
         <PageFooter left="Rust + WebAssembly · Zero-server architecture · Client-side only" right="Your data never leaves this machine" />
       </div>
     </div>
+  );
+}
+
+const fullResSteps = ['Coil sensitivities', 'SENSE eigen-decomposition', 'Reconstruction', 'Lesion scenarios', 'χ² tests & manifest'];
+
+function FullResolutionMri({ autoStart, disabled, onComplete }: { autoStart: boolean; disabled: boolean; onComplete: (run: Run) => void }) {
+  const [accel, setAccel] = useState(4);
+  const [busy, setBusy] = useState<{ stage: string; fraction: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const started = useRef(false);
+
+  const start = async (source: { file?: File }) => {
+    setError(null);
+    setBusy({ stage: source.file ? 'Opening file' : 'Simulating acquisition', fraction: 0 });
+    try {
+      const analysis: MriAnalysis = await runMriAnalysis(
+        source.file ? { type: 'file', file: source.file, acceleration: accel } : { type: 'simulate', acceleration: accel },
+        (stage, fraction) => setBusy({ stage, fraction }),
+      );
+      onComplete({
+        kind: 'sense',
+        title: analysis.meta.format === 'simulation' ? 'MRI · Full resolution' : 'MRI · Raw data',
+        iconId: 'mri',
+        scenarios: analysis.scenarios,
+        meta: analysis.meta,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Analysis failed');
+      setBusy(null);
+    }
+  };
+
+  useEffect(() => {
+    if (autoStart && !started.current) {
+      started.current = true;
+      start({});
+    }
+    // one-shot auto run for the #/demo link
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart]);
+
+  const onDrop = (e: DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f && !busy) start({ file: f });
+  };
+
+  const stepIndex = busy ? Math.min(fullResSteps.length - 1, Math.floor(busy.fraction * fullResSteps.length)) : 0;
+
+  return (
+    <section
+      onDragOver={e => { e.preventDefault(); setDragging(true); }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={onDrop}
+      className={`relative glass rounded-3xl p-5 sm:p-7 animate-fade-in-d2 ring-1 transition-colors ${
+        dragging ? 'ring-cyan-400/70' : 'ring-cyan-500/20'
+      } shadow-[0_0_80px_-30px_rgba(6,182,212,0.5)]`}
+    >
+      <div className="grid lg:grid-cols-[1.2fr_1fr] gap-6 lg:gap-10 items-center">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone="emerald">Exact physics · full resolution</Badge>
+            <span className="text-[11px] font-mono text-slate-400">Phase 0</span>
+          </div>
+          <h2 className="mt-4 text-xl sm:text-2xl font-semibold text-white tracking-tight">
+            Multi-coil MRI · SENSE verification on raw k-space
+          </h2>
+          <p className="mt-2 text-sm text-slate-400 leading-relaxed max-w-xl">
+            Exact per-pixel provenance from the SENSE operator’s eigen-decomposition, a calibrated χ² test on the raw data,
+            and three scenarios — including a hallucinated lesion that is invisible to the data-consistency test.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 text-xs font-mono text-slate-400">
+            <span>320×368 matrix</span><span className="text-slate-600">·</span>
+            <span>8 coils</span><span className="text-slate-600">·</span>
+            <span>equispaced Cartesian</span><span className="text-slate-600">·</span>
+            <span>fastMRI / ISMRMRD .h5</span>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-slate-400">Acceleration</span>
+            <div role="radiogroup" aria-label="Acceleration" className="inline-flex rounded-lg bg-slate-950/60 border border-slate-700/50 p-0.5">
+              {[4, 8].map(r => (
+                <button key={r} role="radio" aria-checked={accel === r} disabled={!!busy || disabled}
+                  onClick={() => setAccel(r)}
+                  className={`px-3 py-1 rounded-md text-xs font-mono transition-colors ${accel === r ? 'bg-slate-700/70 text-white' : 'text-slate-400 hover:text-slate-200'}`}>
+                  R = {r}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button
+            onClick={() => start({})}
+            disabled={!!busy || disabled}
+            className="btn-primary w-full inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0"
+          >
+            Run on simulated 8-channel brain <span aria-hidden>→</span>
+          </button>
+          {import.meta.env.VITE_DEMO ? (
+            <p className="rounded-xl border border-dashed border-slate-700/70 px-4 py-2.5 text-xs text-slate-400 text-center">
+              Loading your own fastMRI / ISMRMRD raw data is available in the full application.
+            </p>
+          ) : (
+            <>
+          <button
+                onClick={() => fileInput.current?.click()}
+                disabled={!!busy || disabled}
+                className="w-full rounded-xl border border-dashed border-slate-600/70 hover:border-cyan-500/50 bg-slate-950/30 px-5 py-3 text-sm text-slate-300 hover:text-white transition-colors disabled:opacity-60"
+              >
+                Load raw k-space (.h5) <span className="text-slate-500">— or drop a file here</span>
+              </button>
+              <input ref={fileInput} type="file" accept=".h5,.hdf5,.mrd" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) start({ file: f }); e.target.value = ''; }} />
+            </>
+          )}
+          <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
+            <LockIcon className="w-3 h-3 text-emerald-400" /> Files are read locally in your browser. Nothing is uploaded.
+          </p>
+        </div>
+      </div>
+
+      {busy && (
+        <div className="absolute inset-0 z-20 rounded-3xl bg-[#070b15]/[0.96] flex items-center justify-center p-6" aria-live="polite">
+          <div className="w-full max-w-md">
+            <div className="flex items-center gap-3">
+              <div className="relative w-9 h-9 shrink-0">
+                <div className="absolute inset-0 rounded-full border-2 border-cyan-500/20" />
+                <div className="absolute inset-0 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-white truncate">{busy.stage}…</div>
+                <div className="text-[11px] text-slate-400 font-mono">on-device · web worker</div>
+              </div>
+              <div className="ml-auto text-sm font-mono text-cyan-300">{Math.round(busy.fraction * 100)}%</div>
+            </div>
+            <div className="mt-4 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+              <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-[width] duration-300" style={{ width: `${Math.max(3, busy.fraction * 100)}%` }} />
+            </div>
+            <ol className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+              {fullResSteps.map((s, i) => (
+                <li key={s} className={`flex items-center gap-2 text-xs font-mono ${i < stepIndex ? 'text-emerald-300' : i === stepIndex ? 'text-cyan-200' : 'text-slate-600'}`}>
+                  <span className="w-3 text-center">{i < stepIndex ? '✓' : i === stepIndex ? '›' : '·'}</span>{s}
+                </li>
+              ))}
+            </ol>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div role="alert" className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>
+      )}
+    </section>
   );
 }
 

@@ -7,9 +7,13 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:demo": "tsc -b && vite build --mode demo",
+    "test": "node --experimental-strip-types --no-warnings tests/fft.test.ts && node --experimental-strip-types --no-warnings tests/sense.test.ts 4 && node --experimental-strip-types --no-warnings tests/undersampled.test.ts",
+    "test:io": "python3 tools/make_fixtures.py fixtures && node --experimental-strip-types --no-warnings tests/io.test.ts fixtures"
   },
   "dependencies": {
+    "h5wasm": "^0.10.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
@@ -22,6 +26,7 @@
     "oxlint": "^1.81.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "vite-plugin-singlefile": "^2.3.3"
   }
 }

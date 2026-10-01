@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { MODALITIES, initEngine, verify } from './lib/engine';
-import type { EngineInfo, ModalityId, VerificationResult } from './lib/engine';
+import { initEngine, verify } from './lib/engine';
+import type { EngineInfo } from './lib/engine';
+import { referenceRun } from './lib/run';
+import type { Run } from './lib/run';
 import { Landing } from './pages/Landing';
 import { ModalitySelector } from './pages/ModalitySelector';
 import { VerificationDashboard } from './pages/VerificationDashboard';
@@ -12,6 +14,7 @@ const routes: Record<string, Page> = {
   '': 'landing',
   '#/': 'landing',
   '#/verify': 'select',
+  '#/demo': 'select',
   '#/dashboard': 'dashboard',
   '#/manifest': 'manifest',
 };
@@ -22,8 +25,10 @@ const readPage = (): Page => routes[window.location.hash] ?? 'landing';
 export default function App() {
   const [engine, setEngine] = useState<EngineInfo | null>(null);
   const [page, setPage] = useState<Page>(readPage);
-  const [result, setResult] = useState<VerificationResult | null>(null);
-  const [modalityId, setModalityId] = useState<ModalityId>('parallel-beam');
+  const [run, setRun] = useState<Run | null>(null);
+  const [scenarioId, setScenarioId] = useState('baseline');
+  // `#/demo` deep link (used in outreach emails) starts the full-resolution MRI run immediately.
+  const [autoStart] = useState(() => window.location.hash === '#/demo');
 
   const go = useCallback((p: Page) => {
     if (window.location.hash !== hashFor[p]) window.location.hash = hashFor[p];
@@ -46,7 +51,7 @@ export default function App() {
       // Deep links to results (e.g. a refreshed dashboard, or #autorun) recompute the default run.
       if (window.location.hash === '#autorun' || ['dashboard', 'manifest'].includes(readPage())) {
         const res = await verify('parallel-beam', 'tv', 0.1);
-        setResult(res);
+        setRun(referenceRun('parallel-beam', res));
         if (window.location.hash === '#autorun') go('dashboard');
       }
     });
@@ -67,34 +72,36 @@ export default function App() {
     );
   }
 
-  const modality = MODALITIES.find(m => m.id === modalityId)!;
-  const needsResult = (page === 'dashboard' || page === 'manifest') && !result;
+  const needsRun = (page === 'dashboard' || page === 'manifest') && !run;
+  const scenario = run?.scenarios.find(s => s.id === scenarioId) ?? run?.scenarios[0];
 
   return (
     <div className="min-h-screen" key={page}>
       {page === 'landing' && <Landing onStart={() => go('select')} />}
-      {(page === 'select' || needsResult) && (
+      {(page === 'select' || needsRun) && (
         <ModalitySelector
           engine={engine}
+          autoStart={autoStart && !run}
           onEngineChange={setEngine}
           onBack={() => go('landing')}
-          onComplete={(id, res) => {
-            setModalityId(id);
-            setResult(res);
+          onComplete={newRun => {
+            setRun(newRun);
+            setScenarioId('baseline');
             go('dashboard');
           }}
         />
       )}
-      {page === 'dashboard' && result && (
+      {page === 'dashboard' && run && scenario && (
         <VerificationDashboard
-          result={result}
-          modality={modality}
+          run={run}
+          scenario={scenario}
+          onScenario={setScenarioId}
           onBack={() => go('select')}
           onViewManifest={() => go('manifest')}
         />
       )}
-      {page === 'manifest' && result && (
-        <ManifestViewer manifestJson={result.manifest_json} onBack={() => go('dashboard')} />
+      {page === 'manifest' && scenario && (
+        <ManifestViewer manifestJson={scenario.result.manifest_json} onBack={() => go('dashboard')} />
       )}
     </div>
   );

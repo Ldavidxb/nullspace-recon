@@ -1,6 +1,9 @@
 import { useState } from 'react';
 
 interface Props {
+  /** Energy shares ‖band‖² / Σ‖band‖² — these sum to 100%. */
+  shares: [number, number, number];
+  /** Norm ratios ‖band‖ / ‖x‖, shown as a footnote. */
   bandRatios: [number, number, number];
 }
 
@@ -11,7 +14,7 @@ const axes = [
   { label: 'Null (AI-supplied)', short: 'Null', color: '#ef4444', text: 'text-red-400', deg: 150 },
 ] as const;
 
-export function SpectralRadar({ bandRatios }: Props) {
+export function SpectralRadar({ shares, bandRatios }: Props) {
   const [active, setActive] = useState<number | null>(null);
   const cx = 130, cy = 122, maxR = 88;
   const rad = (d: number) => (d * Math.PI) / 180;
@@ -20,14 +23,14 @@ export function SpectralRadar({ bandRatios }: Props) {
     y: cy + r * Math.sin(rad(axes[i].deg)),
   });
 
-  const points = bandRatios.map((v, i) => at(i, Math.min(1, Math.max(0, v)) * maxR));
+  const points = shares.map((v, i) => at(i, Math.min(1, Math.max(0, v)) * maxR));
   const poly = points.map(p => `${p.x},${p.y}`).join(' ');
   const ring = (level: number) => axes.map((_, i) => at(i, maxR * level)).map(p => `${p.x},${p.y}`).join(' ');
 
   return (
     <div className="flex flex-col items-center">
       <svg viewBox="0 0 260 236" className="w-full max-w-[320px]" role="img"
-        aria-label={`Band norm ratios: measured ${(bandRatios[0] * 100).toFixed(1)}%, ill-conditioned ${(bandRatios[1] * 100).toFixed(1)}%, null ${(bandRatios[2] * 100).toFixed(1)}%`}>
+        aria-label={`Share of image energy: measured ${(shares[0] * 100).toFixed(1)}%, ill-conditioned ${(shares[1] * 100).toFixed(1)}%, null ${(shares[2] * 100).toFixed(1)}%`}>
         <defs>
           <linearGradient id="radar-fill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor="#06b6d4" stopOpacity="0.35" />
@@ -83,7 +86,7 @@ export function SpectralRadar({ bandRatios }: Props) {
               <rect x={x} y={y} width={w} height={h} rx="6" fill="rgba(15,23,42,0.95)" stroke="rgba(148,163,184,0.25)" />
               <text x={x + w / 2} y={y + 11} textAnchor="middle" fontSize="8" fill="#94a3b8">{axes[active].label}</text>
               <text x={x + w / 2} y={y + 23} textAnchor="middle" fontSize="10" fill="#f8fafc" fontWeight="600"
-                fontFamily="JetBrains Mono, monospace">{(bandRatios[active] * 100).toFixed(1)}% of ‖x‖</text>
+                fontFamily="JetBrains Mono, monospace">{(shares[active] * 100).toFixed(1)}% of energy</text>
             </g>
           );
         })()}
@@ -93,12 +96,21 @@ export function SpectralRadar({ bandRatios }: Props) {
         {axes.map((a, i) => (
           <div key={a.label} className="rounded-lg bg-slate-950/40 border border-slate-700/40 px-2 py-2.5">
             <div className={`text-lg sm:text-xl font-mono font-semibold ${a.text}`}>
-              {(bandRatios[i] * 100).toFixed(1)}%
+              {formatShare(shares[i])}
             </div>
             <div className="text-[11px] text-slate-400 mt-0.5">{a.short}</div>
           </div>
         ))}
       </div>
+      <p className="mt-3 text-[11px] text-slate-500 text-center leading-relaxed">
+        Share of image energy (‖band‖² / ‖x‖², sums to 100%). Norm ratios ‖band‖ / ‖x‖:{' '}
+        <span className="font-mono text-slate-400">{bandRatios.map(v => v.toFixed(3)).join(' · ')}</span>
+      </p>
     </div>
   );
+}
+
+function formatShare(v: number) {
+  const pct = v * 100;
+  return `${pct < 1 ? pct.toFixed(2) : pct.toFixed(1)}%`;
 }

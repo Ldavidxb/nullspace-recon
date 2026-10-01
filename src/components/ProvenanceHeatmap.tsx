@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent } from 'react';
 import { gaussianBlur } from '../lib/engine';
+import { LesionMarker } from './LesionMarker';
 
 interface Props {
   measured: number[];
@@ -9,6 +10,9 @@ interface Props {
   reconstruction: number[];
   bandRatios: [number, number, number];
   n: number;
+  /** Bands are exact orthogonal projections: show raw local energy shares, no re-weighting. */
+  exact?: boolean;
+  lesion?: { x: number; y: number; r: number };
 }
 
 const BAND_COLORS = {
@@ -18,6 +22,16 @@ const BAND_COLORS = {
 } as const;
 
 const BAND_NAMES = ['Measured', 'Ill-conditioned', 'Null (AI-supplied)'] as const;
+
+/** Exact bands: share of local band energy |b_k|² (lightly smoothed), summing to 1 per pixel. */
+function exactShares(measured: number[], ill: number[], nul: number[], n: number) {
+  const energy = (a: number[]) => gaussianBlur(a.map(v => v * v), n, 0.8);
+  const [m, c, z] = [energy(measured), energy(ill), energy(nul)];
+  return m.map((_, i) => {
+    const t = m[i] + c[i] + z[i] || 1;
+    return [m[i] / t, c[i] / t, z[i] / t] as [number, number, number];
+  });
+}
 const BAND_DOT = ['bg-measured', 'bg-illcond', 'bg-null'] as const;
 
 function rms(a: number[]) {
@@ -45,13 +59,13 @@ function computeShares(measured: number[], ill: number[], nul: number[], ratios:
   });
 }
 
-export function ProvenanceHeatmap({ measured, illConditioned, nullBand, reconstruction, bandRatios, n }: Props) {
+export function ProvenanceHeatmap({ measured, illConditioned, nullBand, reconstruction, bandRatios, n, exact = false, lesion }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null);
 
   const shares = useMemo(
-    () => computeShares(measured, illConditioned, nullBand, bandRatios, n),
-    [measured, illConditioned, nullBand, bandRatios, n],
+    () => (exact ? exactShares(measured, illConditioned, nullBand, n) : computeShares(measured, illConditioned, nullBand, bandRatios, n)),
+    [measured, illConditioned, nullBand, bandRatios, n, exact],
   );
 
   useEffect(() => {
@@ -71,7 +85,7 @@ export function ProvenanceHeatmap({ measured, illConditioned, nullBand, reconstr
       // Sharpen the mix toward the dominant band so the map reads as provenance, not mud.
       const w = shares[i].map(s => s ** 2.2);
       const wt = w[0] + w[1] + w[2] || 1;
-      const brightness = 0.22 + 0.78 * Math.sqrt(Math.min(1, Math.abs(reconstruction[i]) / (0.45 * max)));
+      const brightness = (exact ? 0.1 : 0.22) + (exact ? 0.9 : 0.78) * Math.sqrt(Math.min(1, Math.abs(reconstruction[i]) / (0.45 * max)));
       for (let ch = 0; ch < 3; ch++) {
         const c = (cols[0][ch] * w[0] + cols[1][ch] * w[1] + cols[2][ch] * w[2]) / wt;
         img.data[4 * i + ch] = Math.min(255, c * Math.min(1, brightness));
@@ -79,7 +93,7 @@ export function ProvenanceHeatmap({ measured, illConditioned, nullBand, reconstr
       img.data[4 * i + 3] = 255;
     }
     ctx.putImageData(img, 0, 0);
-  }, [shares, reconstruction, n]);
+  }, [shares, reconstruction, n, exact]);
 
   const onMove = (e: PointerEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -100,6 +114,7 @@ export function ProvenanceHeatmap({ measured, illConditioned, nullBand, reconstr
         onPointerLeave={() => setHover(null)}
       >
         <canvas ref={canvasRef} className="block w-full h-full render-pixelated" aria-label="Spectral provenance heatmap" role="img" />
+        <LesionMarker lesion={lesion} n={n} />
         {hover && hovered && (
           <>
             <div

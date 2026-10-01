@@ -1,3 +1,5 @@
+import { formatP } from '../lib/format';
+
 interface Props {
   pValue: number;
   reducedChi2: number;
@@ -36,7 +38,7 @@ export function ChiSquaredGauge({ pValue, reducedChi2, statistic, dof, alpha = 0
   return (
     <div className="flex flex-col items-center">
       <svg viewBox="-16 0 272 150" className="w-full max-w-[320px]" role="img"
-        aria-label={`p-value gauge: p = ${pValue.toFixed(3)}, ${pass ? 'consistent' : 'inconsistent'}`}>
+        aria-label={`p-value gauge: ${formatP(pValue)}, ${pass ? 'consistent' : 'inconsistent'}`}>
         <defs>
           <filter id="gauge-glow" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="3" />
@@ -73,7 +75,7 @@ export function ChiSquaredGauge({ pValue, reducedChi2, statistic, dof, alpha = 0
 
       <div className="-mt-1 text-center">
         <div className="text-2xl font-mono font-semibold text-white">
-          p = {pValue < 0.001 ? pValue.toExponential(1) : pValue.toFixed(3)}
+          {formatP(pValue)}
         </div>
         <div className={`mt-1 inline-flex items-center gap-1.5 text-xs font-bold tracking-[0.2em] ${pass ? 'text-emerald-400' : 'text-red-400'}`}>
           <span aria-hidden>{pass ? '✓' : '✕'}</span>
@@ -96,3 +98,4 @@ export function ChiSquaredGauge({ pValue, reducedChi2, statistic, dof, alpha = 0
     </div>
   );
 }
+

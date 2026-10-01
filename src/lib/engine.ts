@@ -29,6 +29,15 @@ export interface VerificationResult {
   manifest_json: string;
   operator_desc: string;
   prior_desc: string;
+  /** Which engine produced the result; 'sense' = exact full-resolution MRI analysis. */
+  engine?: 'reference' | 'wasm' | 'sense';
+  /** Orthogonal band energies ‖band‖²/Σ‖band‖² (sum to 1). */
+  band_energy_shares?: [number, number, number];
+  display?: { colormap: 'gray' | 'viridis'; range?: [number, number] };
+  ground_truth_label?: string;
+  /** Lesion location in display pixels, when a lesion scenario is shown. */
+  lesion?: { x: number; y: number; r: number };
+  scenario?: string;
 }
 
 export interface EngineInfo {
