@@ -31,8 +31,9 @@ npm run build    # static bundle in dist/ — serve from any static host, no bac
 - `../wasm/pkg/nullspace_recon_wasm.js` (the `demo/wasm/pkg` layout of the main repo), or
 - `./wasm-pkg/nullspace_recon_wasm.js` (copy the `pkg/` output here).
 
-If found, `verify_parallel_beam`, `verify_fan_beam` and `verify_mri` run live in the
-browser. If not, a deterministic **reference dataset** is used: a Shepp-Logan phantom,
+If found, a **Demo data / Live WASM** toggle appears on the modality screen (or open the
+app with `?live` to start in live mode), and `verify_parallel_beam`, `verify_fan_beam` and
+`verify_mri` run in the browser. The default is always the curated **reference dataset**: a Shepp-Logan phantom,
 a degraded reconstruction, a spectral band split, and the published verification
 statistics (parallel-beam at TV λ=0.1 reproduces the reference values exactly:
 rel. error 431.5 %, rank 869, p = 0.5113, χ²ᵣ = 0.997). Manifest hashes are real SHA-256

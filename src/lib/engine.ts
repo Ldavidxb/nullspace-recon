@@ -1,8 +1,9 @@
 // Verification engine facade.
 //
 // When the compiled Rust→WASM package is present next to this app (../wasm/pkg,
-// the layout used in the nullspace-recon repo) it is loaded and used for live
-// computation. Otherwise a deterministic reference engine produces the demo
+// the layout used in the nullspace-recon repo) it is loaded and can be switched on
+// for live computation (opt-in: toggle on the modality screen, or `?live` in the
+// URL). By default a deterministic reference engine produces the curated demo
 // dataset: a Shepp-Logan phantom, a degraded reconstruction, its three
 // provenance bands and the published verification statistics.
 
@@ -33,6 +34,7 @@ export interface VerificationResult {
 export interface EngineInfo {
   kind: 'wasm' | 'reference';
   label: string;
+  wasmAvailable: boolean;
 }
 
 interface WasmModule {
@@ -52,7 +54,17 @@ const wasmCandidates = {
 };
 
 let wasm: WasmModule | null = null;
-let engineInfo: EngineInfo = { kind: 'reference', label: 'Reference dataset' };
+let useWasm = false;
+
+const REFERENCE: EngineInfo = { kind: 'reference', label: 'Reference dataset', wasmAvailable: false };
+let engineInfo: EngineInfo = REFERENCE;
+
+function refreshInfo() {
+  engineInfo = useWasm && wasm
+    ? { kind: 'wasm', label: 'Live WASM', wasmAvailable: true }
+    : { ...REFERENCE, wasmAvailable: wasm !== null };
+  return engineInfo;
+}
 
 export async function initEngine(): Promise<EngineInfo> {
   const loader = Object.values(wasmCandidates)[0];
@@ -61,15 +73,19 @@ export async function initEngine(): Promise<EngineInfo> {
       const mod = (await loader()) as WasmModule;
       await mod.default();
       wasm = mod;
-      engineInfo = { kind: 'wasm', label: 'Rust + WebAssembly' };
+      useWasm = new URLSearchParams(window.location.search).has('live');
     } catch (e) {
       console.warn('nullspace-recon: WASM engine unavailable, using reference dataset', e);
     }
   }
-  return engineInfo;
+  return refreshInfo();
 }
 
-export const getEngineInfo = () => engineInfo;
+/** Switch between live WASM computation and the curated reference dataset. */
+export function setLiveEngine(on: boolean): EngineInfo {
+  useWasm = on && wasm !== null;
+  return refreshInfo();
+}
 
 // ---------------------------------------------------------------------------
 // Modalities
@@ -365,7 +381,7 @@ async function buildManifest(r: Omit<VerificationResult, 'manifest_json'>, modal
 
 export async function verify(modalityId: ModalityId, prior: PriorType, lambda: number): Promise<VerificationResult> {
   const modality = MODALITIES.find(m => m.id === modalityId)!;
-  if (wasm) {
+  if (wasm && useWasm) {
     const res = (() => {
       switch (modalityId) {
         case 'parallel-beam': return wasm.verify_parallel_beam(32, 45, modality.sigma, prior, lambda);

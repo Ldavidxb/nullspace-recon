@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
-import { MODALITIES, verify } from '../lib/engine';
+import { MODALITIES, setLiveEngine, verify } from '../lib/engine';
 import type { EngineInfo, ModalityId, PriorType, VerificationResult } from '../lib/engine';
 import { Badge, LockIcon, LogoMark, NavButton, PageFooter, Wordmark } from '../components/ui';
 
 interface Props {
   engine: EngineInfo;
+  onEngineChange: (engine: EngineInfo) => void;
   onBack: () => void;
   onComplete: (modality: ModalityId, result: VerificationResult) => void;
 }
@@ -36,7 +37,7 @@ const accents: Record<ModalityId, { tile: string; icon: string; glowA: string; g
 
 const steps = ['Forward operator', 'Tikhonov spectrum', 'Band projection', 'χ² residual test', 'Manifest hash'];
 
-export function ModalitySelector({ engine, onBack, onComplete }: Props) {
+export function ModalitySelector({ engine, onEngineChange, onBack, onComplete }: Props) {
   const [running, setRunning] = useState<ModalityId | null>(null);
   const [step, setStep] = useState(0);
   const [prior, setPrior] = useState<PriorType>('tv');
@@ -81,9 +82,28 @@ export function ModalitySelector({ engine, onBack, onComplete }: Props) {
             <LogoMark className="w-6 h-6" />
             <Wordmark className="text-sm" />
           </div>
-          <span className="hidden sm:inline text-xs font-mono text-slate-500">
-            engine: <span className={engine.kind === 'wasm' ? 'text-emerald-300' : 'text-slate-300'}>{engine.label}</span>
-          </span>
+          {engine.wasmAvailable ? (
+            <div role="radiogroup" aria-label="Engine" className="hidden sm:inline-flex rounded-lg bg-slate-950/60 border border-slate-700/50 p-0.5 text-[11px] font-mono">
+              {([[false, 'Demo data'], [true, 'Live WASM']] as const).map(([live, label]) => (
+                <button
+                  key={label}
+                  role="radio"
+                  aria-checked={(engine.kind === 'wasm') === live}
+                  disabled={running !== null}
+                  onClick={() => onEngineChange(setLiveEngine(live))}
+                  className={`px-2.5 py-1 rounded-md transition-colors ${
+                    (engine.kind === 'wasm') === live ? 'bg-slate-700/60 text-white' : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <span className="hidden sm:inline text-xs font-mono text-slate-500">
+              engine: <span className="text-slate-300">{engine.label}</span>
+            </span>
+          )}
         </nav>
 
         <header className="text-center mt-12 sm:mt-16 mb-10 sm:mb-12 animate-fade-in-d1">

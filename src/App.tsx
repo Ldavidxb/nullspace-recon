@@ -76,6 +76,7 @@ export default function App() {
       {(page === 'select' || needsResult) && (
         <ModalitySelector
           engine={engine}
+          onEngineChange={setEngine}
           onBack={() => go('landing')}
           onComplete={(id, res) => {
             setModalityId(id);
