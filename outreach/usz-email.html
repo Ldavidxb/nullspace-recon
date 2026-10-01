@@ -1,0 +1,140 @@
+<!doctype html>
+<!--
+  Outreach email for USZ (Universitätsspital Zürich) — radiology / MR physics.
+  Email-safe: table layout, inline styles, no external images or scripts.
+  Replace every [BRACKETED] placeholder before sending. The demo link must be shared
+  from the artifact's Share menu first, or recipients will not be able to open it.
+  Optional: paste outreach/demo-preview.jpg inline under the preview card.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Can a data-consistency check catch an AI hallucination?</title>
+</head>
+<body style="margin:0;padding:0;background:#eef2f6;">
+<!-- preheader (shown in the inbox preview line) -->
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
+A 7 mm lesion, invisible to the χ² test, flagged by per-pixel provenance — 2-minute interactive demo, runs entirely in your browser.
+</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef2f6;">
+<tr><td align="center" style="padding:24px 12px;">
+
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:12px;border:1px solid #dde3ea;">
+  <!-- header -->
+  <tr><td style="padding:24px 32px 8px 32px;font-family:Helvetica,Arial,sans-serif;">
+    <span style="font-size:16px;font-weight:bold;color:#0b1220;">nullspace</span><span style="font-size:16px;font-weight:bold;color:#0891b2;">-recon</span>
+    <span style="font-size:12px;color:#64748b;">&nbsp;·&nbsp;physics-bounded verification for AI reconstruction</span>
+  </td></tr>
+
+  <!-- body copy -->
+  <tr><td style="padding:16px 32px 0 32px;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#1e293b;">
+    <p style="margin:0 0 14px 0;">Dear [Dr. Last name],</p>
+    <p style="margin:0 0 14px 0;">
+      Accelerated MRI with deep-learning reconstruction raises one question a data-consistency check cannot answer:
+      <strong>which parts of the image did the scanner actually measure, and which were supplied by the model?</strong>
+    </p>
+    <p style="margin:0 0 14px 0;">
+      We have built a verification layer that answers it from the raw data. For Cartesian multi-coil acquisitions it uses an exact
+      eigen-decomposition of the SENSE operator to split every pixel into <span style="color:#059669;font-weight:bold;">measured</span>,
+      <span style="color:#b45309;font-weight:bold;">ill-conditioned</span> and <span style="color:#dc2626;font-weight:bold;">null-space</span> content.
+      It runs a calibrated χ² test on the k-space residuals and writes a hash-bound manifest of the result.
+      Everything runs locally in the browser; no image or raw data leaves the machine.
+    </p>
+    <p style="margin:0 0 18px 0;">
+      The short demo below shows why this matters. A lesion of about 7&nbsp;mm, placed only in the operator’s null space,
+      passes the χ² test because it agrees with the raw data. The provenance map flags it.
+    </p>
+  </td></tr>
+
+  <!-- clickable preview card -->
+  <tr><td style="padding:0 32px;">
+    <a href="https://claude.ai/artifact/D5bdxT9D8cRZdXCKYa4Cth" target="_blank" style="text-decoration:none;display:block;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#070b15;border-radius:10px;">
+      <tr><td style="padding:16px 18px 6px 18px;font-family:Helvetica,Arial,sans-serif;">
+        <span style="font-size:13px;font-weight:bold;color:#ffffff;">MRI · full resolution</span>
+        <span style="font-size:11px;color:#94a3b8;">&nbsp; 8 coils · R = 4 · 320×368</span>
+      </td></tr>
+      <tr><td style="padding:6px 18px 4px 18px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:Helvetica,Arial,sans-serif;font-size:12px;">
+          <tr>
+            <td style="padding:7px 0;color:#64748b;border-bottom:1px solid #1e293b;">Scenario</td>
+            <td style="padding:7px 0;color:#64748b;border-bottom:1px solid #1e293b;" align="center">χ² test</td>
+            <td style="padding:7px 0;color:#64748b;border-bottom:1px solid #1e293b;" align="right">Provenance map</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;color:#e2e8f0;border-bottom:1px solid #1e293b;">1&nbsp; Prior-filled reconstruction</td>
+            <td style="padding:8px 0;color:#34d399;border-bottom:1px solid #1e293b;" align="center">pass</td>
+            <td style="padding:8px 0;color:#94a3b8;border-bottom:1px solid #1e293b;" align="right">2.2% null energy</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;color:#ffffff;font-weight:bold;border-bottom:1px solid #1e293b;">2&nbsp; Hallucinated lesion</td>
+            <td style="padding:8px 0;color:#34d399;font-weight:bold;border-bottom:1px solid #1e293b;" align="center">pass</td>
+            <td style="padding:8px 0;color:#f87171;font-weight:bold;border-bottom:1px solid #1e293b;" align="right">● lesion flagged red</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;color:#e2e8f0;">3&nbsp; Inconsistent edit</td>
+            <td style="padding:8px 0;color:#f87171;" align="center">fail</td>
+            <td style="padding:8px 0;color:#94a3b8;" align="right">caught by χ²</td>
+          </tr>
+        </table>
+      </td></tr>
+      <tr><td style="padding:10px 18px 16px 18px;font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#22d3ee;">
+        Open the interactive demo →
+      </td></tr>
+    </table>
+    </a>
+    <!-- [Optional] paste demo-preview.jpg here, linked to the same URL -->
+  </td></tr>
+
+  <!-- button -->
+  <tr><td align="center" style="padding:22px 32px 6px 32px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td bgcolor="#0891b2" style="border-radius:8px;">
+        <a href="https://claude.ai/artifact/D5bdxT9D8cRZdXCKYa4Cth" target="_blank"
+           style="display:inline-block;padding:12px 26px;font-family:Helvetica,Arial,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:8px;">
+          Open the 2-minute demo
+        </a>
+      </td>
+    </tr></table>
+    <p style="margin:8px 0 0 0;font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#64748b;">
+      Runs in your browser · simulated data only · nothing is uploaded
+    </p>
+  </td></tr>
+
+  <!-- the ask -->
+  <tr><td style="padding:18px 32px 0 32px;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#1e293b;">
+    <p style="margin:0 0 10px 0;"><strong>What we would like to explore with your group</strong></p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:1.55;color:#334155;">
+      <tr><td valign="top" style="padding:0 10px 8px 0;color:#0891b2;">●</td>
+          <td style="padding:0 0 8px 0;">A small retrospective research study on accelerated protocols you already run: raw k-space export (ISMRMRD or vendor raw data) alongside the clinical reconstruction of the same series.</td></tr>
+      <tr><td valign="top" style="padding:0 10px 8px 0;color:#0891b2;">●</td>
+          <td style="padding:0 0 8px 0;">An endpoint your radiologists define: do flagged regions match artefacts confirmed against a fully-sampled reference?</td></tr>
+      <tr><td valign="top" style="padding:0 10px 8px 0;color:#0891b2;">●</td>
+          <td style="padding:0 0 8px 0;">Strictly a research and QA tool, not for diagnostic use. Data stays on USZ machines, under your ethics and data-protection framework.</td></tr>
+    </table>
+    <p style="margin:10px 0 14px 0;">
+      The method builds directly on SENSE, which was developed in Zurich, so we would particularly value your view on where
+      it holds up and where it does not. Would you be open to a 30-minute call in the coming weeks?
+    </p>
+    <p style="margin:0 0 6px 0;">Kind regards,</p>
+    <p style="margin:0 0 24px 0;">
+      [Your name]<br>
+      [Title] · [Company]<br>
+      <span style="color:#64748b;">[Phone] · [Email]</span>
+    </p>
+  </td></tr>
+
+  <!-- footer -->
+  <tr><td style="padding:14px 32px 22px 32px;border-top:1px solid #e2e8f0;font-family:Helvetica,Arial,sans-serif;font-size:11px;line-height:1.5;color:#94a3b8;">
+    The demo uses a simulated 8-channel brain phantom. Phase 0 supports equispaced Cartesian multi-coil MRI
+    (fastMRI and ISMRMRD raw data); CT and non-Cartesian sampling are on the roadmap.
+  </td></tr>
+</table>
+
+</td></tr>
+</table>
+</body>
+</html>
