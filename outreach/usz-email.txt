@@ -1,0 +1,32 @@
+Subject: Can a data-consistency check catch an AI hallucination? (2-minute demo)
+
+Dear [Dr. Last name],
+
+Accelerated MRI with deep-learning reconstruction raises one question a data-consistency check cannot answer: which parts of the image did the scanner actually measure, and which were supplied by the model?
+
+We have built a verification layer that answers it from the raw data. For Cartesian multi-coil acquisitions it uses an exact eigen-decomposition of the SENSE operator to split every pixel into measured, ill-conditioned and null-space content. It runs a calibrated chi-squared test on the k-space residuals and writes a hash-bound manifest of the result. Everything runs locally in the browser; no image or raw data leaves the machine.
+
+The short demo shows why this matters. A lesion of about 7 mm, placed only in the operator's null space, passes the chi-squared test because it agrees with the raw data. The provenance map flags it.
+
+  Scenario                        Chi-squared   Provenance map
+  1  Prior-filled reconstruction  pass          2.2% null energy
+  2  Hallucinated lesion          pass          lesion flagged red
+  3  Inconsistent edit            fail          caught by chi-squared
+
+Open the 2-minute demo: https://claude.ai/artifact/D5bdxT9D8cRZdXCKYa4Cth
+(Runs in your browser, simulated data only, nothing is uploaded.)
+
+What we would like to explore with your group:
+- A small retrospective research study on accelerated protocols you already run: raw k-space export (ISMRMRD or vendor raw data) alongside the clinical reconstruction of the same series.
+- An endpoint your radiologists define: do flagged regions match artefacts confirmed against a fully-sampled reference?
+- Strictly a research and QA tool, not for diagnostic use. Data stays on USZ machines, under your ethics and data-protection framework.
+
+The method builds directly on SENSE, which was developed in Zurich, so we would particularly value your view on where it holds up and where it does not. Would you be open to a 30-minute call in the coming weeks?
+
+Kind regards,
+[Your name]
+[Title] · [Company]
+[Phone] · [Email]
+
+--
+The demo uses a simulated 8-channel brain phantom. Phase 0 supports equispaced Cartesian multi-coil MRI (fastMRI and ISMRMRD raw data); CT and non-Cartesian sampling are on the roadmap.

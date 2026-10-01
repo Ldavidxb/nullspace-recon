@@ -63,9 +63,11 @@ export function ManifestViewer({ manifestJson, onBack }: Props) {
             <NavButton onClick={copy} variant="outline" ariaLabel="Copy manifest JSON">
               {copied ? <span className="text-emerald-300">Copied ✓</span> : 'Copy'}
             </NavButton>
-            <NavButton onClick={download} variant="accent">
-              Download JSON <span aria-hidden>↓</span>
-            </NavButton>
+            {!import.meta.env.VITE_DEMO && (
+              <NavButton onClick={download} variant="accent">
+                Download JSON <span aria-hidden>↓</span>
+              </NavButton>
+            )}
           </div>
         </nav>
 
